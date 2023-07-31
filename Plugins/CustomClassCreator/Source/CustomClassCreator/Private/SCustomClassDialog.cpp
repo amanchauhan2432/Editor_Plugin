@@ -4,6 +4,7 @@
 #include "Widgets/Input/SButton.h"
 #include "Styling/CoreStyle.h"
 #include "Misc/Paths.h"
+#include "Misc/FileHelper.h" 
 
 void SCustomClassDialog::Construct(const FArguments& InArgs)
 {
@@ -248,8 +249,61 @@ void SCustomClassDialog::Construct(const FArguments& InArgs)
 
 FReply SCustomClassDialog::OnCreateButtonClicked() const
 {
+    // Create the header file with the given name and path
+    FString HFilePath;
+    if (ModuleNames.IsValidIndex(0) && SelectedModuleName == ModuleNames[0])
+    {
+        HFilePath = FPaths::ProjectDir() / TEXT("Source") / FApp::GetProjectName() / TEXT("/");
+    }
+    else
+    {
+        HFilePath = FPaths::ProjectPluginsDir() / *SelectedModuleName.Get() / TEXT("Source") / *SelectedModuleName.Get() / TEXT("Public/");
+    }
+    FString HeaderFilePath = FPaths::Combine(HFilePath, FileName + TEXT(".h"));
+
+    FString HeaderFileContent;
+
+    // Construct the header file content with Unreal Engine standards
+    HeaderFileContent += TEXT("#pragma once\n\n");
+    HeaderFileContent += FString::Printf(TEXT("#include \"%s.generated.h\"\n\n"), *FileName);
+
+    for (const FStatePairs& StatePair : StatePairs)
+    {
+        HeaderFileContent += FString::Printf(TEXT("struct %s\n"), *StatePair.StartingState);
+        HeaderFileContent += TEXT("{\n    GENERATED_BODY()\n\n    // Add your code here\n\n};\n\n");
+
+        HeaderFileContent += FString::Printf(TEXT("struct %s\n"), *StatePair.TargetState);
+        HeaderFileContent += TEXT("{\n    GENERATED_BODY()\n\n    // Add your code here\n\n};\n\n");
+    }
+
+    HeaderFileContent += TEXT("\n\n");
+    HeaderFileContent += TEXT("class ");
+    HeaderFileContent += (*SelectedModuleName.Get()->ToUpper());
+    HeaderFileContent += TEXT("_API ");
+    HeaderFileContent += FileName;
+    HeaderFileContent += TEXT("\n{\n\n");
+    HeaderFileContent += TEXT("};\n");
+
+    // Write the content to the header file
+    if (FFileHelper::SaveStringToFile(HeaderFileContent, *HeaderFilePath))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Header file created successfully at: %s"), *HeaderFilePath);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to create header file at: %s"), *HeaderFilePath);
+    }
+
+    // Close the dialog box
+    TSharedPtr<SWindow> ParentWindow = FSlateApplication::Get().FindWidgetWindow(AsShared());
+    if (ParentWindow.IsValid())
+    {
+        ParentWindow->RequestDestroyWindow();
+    }
+
     return FReply::Handled();
 }
+
 
 FReply SCustomClassDialog::OnAddButtonClicked() const // When the Add button is pressed, opening the AddStateDialog screen
 {
@@ -354,7 +408,6 @@ void SCustomClassDialog::UpdateStatePairs() // When the Add button is pressed of
 
 bool SCustomClassDialog::IsCreateButtonEnabled() const // Check whether Create class button should be enabled or not based on some validation checks
 {
-    FString CppFile = FilePath / FileName + TEXT(".cpp");
     FString HFile = FilePath / FileName + TEXT(".h");
 
     if (FileName.IsEmpty() || FileName.Contains(TEXT(" "))) // FileName can't be empty or can't have spaces
@@ -376,26 +429,16 @@ bool SCustomClassDialog::IsCreateButtonEnabled() const // Check whether Create c
     {
         return false;
     }
-    
-    else if (ModuleNames.IsValidIndex(0) && SelectedModuleName == ModuleNames[0]) // Check whether if the selected module is project name :
+    else // Check if file already exists
     {
-        if (FPlatformFileManager::Get().GetPlatformFile().FileExists(*CppFile) || FPlatformFileManager::Get().GetPlatformFile().FileExists(*HFile)) // If it's project name then check if file name already exists at project source directory or not
+        TArray<FString> ProjectDirectories;
+        FString ProjectSourcePath = FPaths::ProjectDir();
+        IFileManager::Get().FindFilesRecursive(ProjectDirectories, *ProjectSourcePath, *(FileName + TEXT(".h")), true, false);
+        if (ProjectDirectories.Num() > 0)
         {
             return false;
         }
     }
-    else // If it's plugin name then check if file name already exists at plugin source directory or not
-    {
-        FString PluginPath = FPaths::ProjectPluginsDir() / *SelectedModuleName.Get();
-        FString PublicPath = PluginPath / TEXT("Source") / *SelectedModuleName.Get() / TEXT("Public");
-        FString PrivatePath = PluginPath / TEXT("Source") / *SelectedModuleName.Get() / TEXT("Private");
-
-        if (FPlatformFileManager::Get().GetPlatformFile().FileExists(*(PublicPath / (FileName + TEXT(".h")))) || FPlatformFileManager::Get().GetPlatformFile().FileExists(*(PrivatePath / (FileName + TEXT(".cpp")))))
-        {
-            return false;
-        }
-    }
-
 
     return true;
 }
@@ -416,7 +459,6 @@ EVisibility SCustomClassDialog::GetWarningBoxVisibility() const // Show warning 
 
 FText SCustomClassDialog::GetWarningText() const // Get different warning texts based on different conditions
 {
-    FString CppFile = FilePath / FileName + TEXT(".cpp");
     FString HFile = FilePath / FileName + TEXT(".h");
 
     if (FileName.IsEmpty()) // FileName can't be empty or cant have spaces
@@ -443,21 +485,12 @@ FText SCustomClassDialog::GetWarningText() const // Get different warning texts 
     {
         return FText::Format(FText::FromString(TEXT("All source code must exist within {0}")), FText::FromString(DefaultProjectPath));
     }
-
-    else if (ModuleNames.IsValidIndex(0) && SelectedModuleName == ModuleNames[0]) // Check whether if the selected module is project name :
+    else // Check if file already exists
     {
-        if (FPlatformFileManager::Get().GetPlatformFile().FileExists(*CppFile) || FPlatformFileManager::Get().GetPlatformFile().FileExists(*HFile)) // If it's project name then check if file name already exists at project source directory or not
-        {
-            return FText::FromString(TEXT("File already exist with this name."));
-        }
-    }
-    else // If it's plugin name then check if file name already exists at plugin source directory or not
-    {
-        FString PluginPath = FPaths::ProjectPluginsDir() / *SelectedModuleName.Get();
-        FString PublicPath = PluginPath / TEXT("Source") / *SelectedModuleName.Get() / TEXT("Public");
-        FString PrivatePath = PluginPath / TEXT("Source") / *SelectedModuleName.Get() / TEXT("Private");
-
-        if (FPlatformFileManager::Get().GetPlatformFile().FileExists(*(PublicPath / (FileName + TEXT(".h")))) || FPlatformFileManager::Get().GetPlatformFile().FileExists(*(PrivatePath / (FileName + TEXT(".cpp")))))
+        TArray<FString> ProjectDirectories;
+        FString ProjectSourcePath = FPaths::ProjectDir();
+        IFileManager::Get().FindFilesRecursive(ProjectDirectories, *ProjectSourcePath, *(FileName + TEXT(".h")), true, false);
+        if (ProjectDirectories.Num() > 0)
         {
             return FText::FromString(TEXT("File already exist with this name."));
         }

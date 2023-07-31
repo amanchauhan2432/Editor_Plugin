@@ -167,6 +167,11 @@ bool SAddStateDialog::IsAddButtonEnabled() const // Check whether Add button sho
         return false;
     }
 
+    else if (StartingState == TargetState) // Both states cant be equal
+    {
+        return false;
+    }
+
     else if (!IsAlphabeticStart(StartingState) || !IsAlphabeticStart(TargetState)) // States must start with alphabet
     {
         return false;
@@ -185,6 +190,12 @@ bool SAddStateDialog::IsAddButtonEnabled() const // Check whether Add button sho
             {
                 return false;
             }
+
+            if (StatePair.StartingState == StartingState || StatePair.TargetState == StartingState || StatePair.TargetState == TargetState || StatePair.TargetState == StartingState)  // State names should not already exists
+            {
+                return false;
+            }
+            
         }
     }
     return true;
@@ -218,6 +229,11 @@ FText SAddStateDialog::GetWarningText() const // Get different warning texts bas
     {
         return FText::FromString(TEXT("Please enter both Starting State and Target State."));
     }
+
+    else if (StartingState == TargetState) // Both states cant be equal
+    {
+        return FText::FromString(TEXT("State names can't be same."));
+    }
     
     else if (!IsAlphabeticStart(StartingState) || !IsAlphabeticStart(TargetState)) // States must start with alphabet
     {
@@ -235,13 +251,13 @@ FText SAddStateDialog::GetWarningText() const // Get different warning texts bas
         {
             if (StatePair.StartingState == StartingState && StatePair.TargetState == TargetState)
             {
-                bStatePairExists = true;
-                break;
+                return FText::FromString(TEXT("The state pair already exists."));
             }
-        }
-        if (bStatePairExists)
-        {
-            return FText::FromString(TEXT("The state pair already exists."));
+
+            if (StatePair.StartingState == StartingState || StatePair.TargetState == StartingState || StatePair.TargetState == TargetState || StatePair.TargetState == StartingState)  // State names should not already exists
+            {
+                return FText::FromString(TEXT("State name already exists."));
+            }
         }
     }
 
